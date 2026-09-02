@@ -1,73 +1,78 @@
 # Progressão
 
-PWA de treino de hipertrofia com foco nos pontos fracos: **costas (largura), ombro (deltoide lateral e posterior) e peito (porção superior)**.
+Aplicativo de acompanhamento de musculação em português do Brasil. PWA sem build, roda offline no celular e no computador, com persistência local.
 
-Registro e progressão de carga, com histórico completo por exercício e local de treino. Roda offline no celular e salva tudo no próprio aparelho.
+## Atleta
 
-## O que ele faz
+Gerson, 37 anos, 2,02 m, 102 kg. Nível avançado, 6 treinos por semana, até 50 minutos por sessão.
+Objetivo: hipertrofia com prioridade em peitoral superior, espessura das costas, deltoide lateral e posterior, cabeça longa do tríceps e quadríceps.
 
-- **10 treinos prontos**: Costas A (largura), Costas B (espessura), Peito A (porção superior), Peito B (volume e alongamento), Ombro (efeito 3D), Upper Weak Points (sessão combinada), Perna A (quadríceps), Perna B (posterior e glúteo), Braço e Treino livre.
-- **Registro simples**: um campo de peso da última série por exercício, mais o botão de concluído. Sem grade de séries.
-- **Série avançada opcional** por exercício: myo-reps, cluster, rest-pause, back-off ou drop-set.
-- **Biblioteca de substituições**: 2 a 3 alternativas por exercício, para máquina ocupada ou execução que você ainda não domina. A troca fica salva.
-- **Histórico completo** por exercício: todas as sessões salvas, sem corte, com gráfico de carga máxima por sessão, recorde, variação percentual no período e volume total.
-- **Local de treino** registrado em cada sessão, com sugestão dos locais já usados. Útil para comparar carga entre academias diferentes.
-- **Timer de descanso** disparado ao marcar a série concluída, já com o tempo prescrito do exercício, com botão de mais 15 segundos e de pular.
-- **Volume semanal por grupo muscular**: séries efetivas dos últimos 7 dias contra a faixa alvo de hipertrofia, com comparação com a semana anterior.
-- **Detecção de estagnação**: 3 sessões com o mesmo peso disparam alerta com recomendação de deload ou troca.
-- **Editar e apagar sessão** direto na tela de evolução do exercício.
-- **Exercício avulso**: adicione qualquer exercício a qualquer treino, definindo grupo, séries, faixa de reps, descanso e incremento.
-- **Tema claro**, pensado para leitura rápida no celular durante o treino.
-- **Offline first**: service worker com cache do app inteiro. Depois do primeiro acesso, funciona sem internet na academia.
+## Princípio do registro
 
-## Como instalar no celular
+Ao terminar cada exercício o usuário informa apenas três coisas:
 
-1. Abra a URL do GitHub Pages no navegador do celular.
-2. **iPhone (Safari)**: botão de compartilhar, depois "Adicionar à Tela de Início".
-3. **Android (Chrome)**: menu de três pontos, depois "Instalar app" ou "Adicionar à tela inicial".
+1. carga da última série válida;
+2. repetições dessa série;
+3. RIR da série (3+, 2, 1,5, 1, 0,5, 0 ou falha técnica).
 
-O app abre em tela cheia, sem barra de navegador.
+Todo o resto é apresentado pelo app: séries válidas, faixa de repetições, RIR alvo da semana, descanso, aquecimento calculado, top set e back-offs, técnica avançada da semana, substituições e cronômetro.
+
+## Divisão semanal
+
+| Dia | Treino |
+|---|---|
+| A | Peito + costas: espessura |
+| B | Ombros + braços |
+| C | Pernas + abdômen |
+| D | Costas: largura |
+| E | Peito superior + deltoide lateral |
+| F | Costas: especialização em espessura |
+| 7 | Descanso, depois reinicia em A |
+
+## Periodização de 12 semanas
+
+Semanas 1, 2, 5, 6, 9, 10 e 12 acumulam volume e repetições. Semanas 3, 7 e 11 são de pico, com Myo-reps, rest-pause e drop-sets liberados. Semanas 4 e 8 são descarga: 60% das séries, cerca de 87% da carga, RIR 3 e nenhuma técnica.
+
+Regras de segurança das técnicas: no máximo um intensificador por treino, nunca em composto livre com barra, nunca nas semanas de descarga.
+
+## Progressão automática
+
+Dupla progressão. A carga sobe quando a última série atinge o topo da faixa, o RIR real é igual ou maior que o programado e não houve registro de dor. Superiores sobem cerca de 3,5%, inferiores cerca de 7%, sempre arredondado para o menor incremento configurado. Dentro da faixa, mantém a carga e busca repetição. Abaixo da faixa em falha, reduz cerca de 5%. RIR real abaixo do programado nunca gera aumento.
+
+No Graviton, progredir significa reduzir a assistência. Na barra fixa, aumentar o lastro ao atingir 10 repetições limpas.
+
+## Aquecimento calculado
+
+Primeiro composto do grupo: 40% x 10, 60% x 6, 75% x 3, 85% x 1 a 2.
+Segundo composto do mesmo grupo: 60% x 6 e, se necessário, 80% x 2 a 3.
+Isoladores: uma série de 10 a 12 com 55%.
+Graviton: depressão escapular x 12, assistência alta x 6, assistência moderada x 3.
+
+As cargas são calculadas sobre a carga sugerida do dia e recalculadas ao vivo quando o usuário digita outra carga.
+
+## Telas
+
+- **Painel**: semana, dia, treino do dia, sessões, sequência, percentual do ciclo, cargas que evoluíram, estagnação e botão de iniciar treino.
+- **Treino**: um exercício por vez em card grande, com aquecimento, blocos de última carga, repetições, RIR e carga sugerida, técnica da semana, supersérie destacada, substituições, cronômetro e conclusão.
+- **Histórico**: por exercício, com gráfico de carga, recordes de carga e de repetições, variação percentual, estagnação e todas as sessões.
+- **Ajustes**: unidade, incrementos, descanso padrão, Graviton, semana e dia do ciclo, backup JSON, exportação CSV, importação e zerar ciclo.
+
+## Persistência
+
+Tudo em `localStorage`, salvo a cada ação. A sessão em andamento é retomada ao reabrir o app. Backup em JSON e histórico em CSV pelos botões de Ajustes.
 
 ## Estrutura
 
 ```
-index.html               shell do app
-css/style.css            tema escuro, azul imperial e magenta
-js/data.js               programa de treinos (edite aqui para mudar exercícios)
-js/app.js                render, registro, progressão, substituições
+index.html               shell
+css/style.css            tema escuro azul-marinho
+js/data.js               perfil, periodização e os 6 treinos
+js/engine.js             progressão, aquecimento e regras semanais
+js/app.js                telas, cronômetro, persistência e backup
 manifest.webmanifest     metadados PWA
-sw.js                    service worker (cache offline)
-icons/                   ícones 192 e 512
+sw.js                    service worker
 ```
 
-## Editando os treinos
+## Segurança
 
-Todo o programa está em `js/data.js`. Cada exercício tem:
-
-```js
-{
-  id: "ca1",                      // identificador único, usado no histórico
-  name: "Pulldown pegada aberta pronada",
-  sets: 4, repsMin: 8, repsMax: 10,
-  rir: 1,                         // reps in reserve alvo
-  rest: 120,                      // descanso em segundos
-  inc: 5,                         // incremento de carga sugerido, em kg
-  cue: "...",                     // orientação de execução
-  tech: "rest-pause",             // null | "rest-pause" | "myo-reps" | "drop-set"
-  alts: ["...", "..."]            // substituições
-}
-```
-
-Não mude o `id` de um exercício depois de começar a registrar, porque o histórico é indexado por ele.
-
-## Dados
-
-Tudo fica no `localStorage` do próprio aparelho. Nada sai do celular, não existe servidor nem conta. Trocar de aparelho ou limpar os dados do navegador apaga o histórico.
-
-## Publicação
-
-Hospedado no GitHub Pages a partir da branch `main`, pasta raiz.
-
-## Licença
-
-Uso pessoal.
+Interrompa o exercício em caso de dor aguda, tontura, falta de ar incomum, palpitação ou perda de controle do movimento. Dor articular não é intensidade. Ao marcar dor no registro, o app não sugere progressão na sessão seguinte.
