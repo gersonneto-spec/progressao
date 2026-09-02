@@ -245,7 +245,7 @@ function vPainel() {
 
   <div class="sec">Trocar o treino do dia</div>
   <div class="chips" style="padding:0 0 4px">
-    ${TREINOS.map(x => `<button class="mini ${x.id === d ? "on" : ""}" data-dia="${x.id}">${x.id} · ${esc(x.grupo)}</button>`).join("")}
+    ${TREINOS.filter(x => !x.avulso).map(x => `<button class="mini ${x.id === d ? "on" : ""}" data-dia="${x.id}">${x.id} · ${esc(x.grupo)}</button>`).join("")}
     <button class="mini ${d === "R" ? "on" : ""}" data-dia="R">Descanso</button>
   </div>
 
@@ -806,7 +806,9 @@ document.addEventListener("click", ev => {
   }
   if (el.hasAttribute("data-dia")) {
     const d = el.getAttribute("data-dia");
-    CICLO.diaIdx = DIAS.indexOf(d); grava(K.ciclo, CICLO);
+    const k = DIAS.indexOf(d);
+    if (k < 0) return;
+    CICLO.diaIdx = k; grava(K.ciclo, CICLO);
     if (SES && SES.treino !== d) { SES = null; grava(K.ses, null); }
     render(); return aviso(d === "R" ? "Dia de descanso" : "Treino " + d + " selecionado");
   }
