@@ -197,10 +197,15 @@ const TREINOS = [
         series: 2, repMin: 12, repMax: 15, desc: [60, 60], tec: "rest",
         subs: ["Remada alta na polia com apoio", "Remada articulada aberta"] }
     ]
+  },
+  {
+    id: "Z", titulo: "Treino avulso", grupo: "Avulso", avulso: true,
+    nota: "Sessão fora do programa. Monte a lista e registre normalmente. Não avança o dia do ciclo.",
+    ex: []
   }
 ];
 
-/* dias do ciclo: 6 treinos + descanso */
+/* dias do ciclo: 6 treinos + descanso. Z (avulso) fica fora do ciclo */
 const DIAS = ["A", "B", "C", "D", "E", "F", "R"];
 
 const SUPERSERIES = {

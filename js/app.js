@@ -2,7 +2,7 @@
    PROGRESSÃO v3 — Aplicativo
    ============================================================ */
 
-const K = { cfg: "pg3_cfg", ciclo: "pg3_ciclo", logs: "pg3_logs", subs: "pg3_subs", ses: "pg3_ses" };
+const K = { cfg: "pg3_cfg", ciclo: "pg3_ciclo", logs: "pg3_logs", subs: "pg3_subs", ses: "pg3_ses", cust: "pg3_cust", locs: "pg3_locs" };
 const ler = (k, f) => { try { const v = JSON.parse(localStorage.getItem(k)); return v === null ? f : v; } catch (e) { return f; } };
 const grava = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
 
@@ -11,20 +11,44 @@ let CICLO = ler(K.ciclo, { semana: 1, diaIdx: 0, sessoes: 0, dias: [] });
 let LOGS = ler(K.logs, {});
 let SUBS = ler(K.subs, {});
 let SES = ler(K.ses, null);
+let CUST = ler(K.cust, []);        // exercícios do treino avulso
+let LOCS = ler(K.locs, []);        // locais de treino já usados
 
 const app = document.getElementById("app");
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const hoje = () => new Date().toISOString().slice(0, 10);
+const ontem = () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); };
 const dt = iso => iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) : "";
 const dtL = iso => iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(2, 4) : "";
 const U = () => CFG.unidade || "kg";
 
 const treino = id => TREINOS.find(t => t.id === id);
+const exsDe = t => t.ex.concat(CUST.filter(c => c.wid === t.id));
 const exNome = ex => SUBS[ex.id] || ex.nome;
-const todosEx = () => TREINOS.flatMap(t => t.ex.map(e => [t, e]));
+const todosEx = () => TREINOS.flatMap(t => exsDe(t).map(e => [t, e]));
 const achaEx = id => todosEx().find(([, e]) => e.id === id) || null;
 const diaAtual = () => DIAS[CICLO.diaIdx % 7];
 const semAtual = () => Engine.semana(CICLO.semana);
+
+/* ============================================================ recordes */
+function recCarga(exId) { const h = LOGS[exId] || []; return h.length ? Math.max(...h.map(x => x.carga)) : 0; }
+function recReps(exId) { const h = LOGS[exId] || []; return h.length ? Math.max(...h.map(x => x.reps)) : 0; }
+function repsNaCarga(exId, carga) {
+  const h = (LOGS[exId] || []).filter(x => x.carga === carga);
+  return h.length ? Math.max(...h.map(x => x.reps)) : 0;
+}
+/* verifica se carga/reps informados batem recorde, comparando com o histórico salvo */
+function checaPR(exId, carga, reps) {
+  const h = LOGS[exId] || [];
+  if (!h.length) return null;
+  const rc = recCarga(exId);
+  if (carga > rc) return { k: "carga", txt: "Recorde de carga. Anterior: " + fmtN(rc) + " " + U() + "." };
+  if (carga === rc) {
+    const rr = repsNaCarga(exId, carga);
+    if (reps > rr) return { k: "reps", txt: "Recorde de repetições com " + fmtN(carga) + " " + U() + ". Anterior: " + rr + " reps." };
+  }
+  return null;
+}
 
 /* ============================================================ cronômetro */
 const Timer = {
@@ -60,6 +84,65 @@ const Timer = {
     e.querySelector(".t-time").textContent = m + ":" + String(s).padStart(2, "0");
   }
 };
+
+/* ============================================================ folha inferior */
+function folha(titulo, html) {
+  let s = document.getElementById("folha");
+  if (!s) { s = document.createElement("div"); s.id = "folha"; s.className = "folha"; document.body.appendChild(s); }
+  s.innerHTML = `<div class="folha-bg" data-fecha></div><div class="folha-in">
+    <div class="folha-h">${esc(titulo)}<button class="mini" data-fecha>Fechar</button></div>${html}</div>`;
+  requestAnimationFrame(() => s.classList.add("abre"));
+}
+function fechaFolha() { const s = document.getElementById("folha"); if (s) { s.classList.remove("abre"); setTimeout(() => s.remove(), 200); } }
+
+/* biblioteca: todos os exercícios do programa e suas substituições */
+function biblioteca() {
+  const m = new Map();
+  TREINOS.forEach(t => t.ex.forEach(e => {
+    if (!m.has(e.nome)) m.set(e.nome, { nome: e.nome, grupo: e.grupo, tipo: e.tipo, membro: e.membro, series: e.series, repMin: e.repMin, repMax: e.repMax, rir: 1, desc: e.desc, subs: e.subs || [] });
+    (e.subs || []).forEach(s => { if (!m.has(s)) m.set(s, { nome: s, grupo: e.grupo, tipo: e.tipo, membro: e.membro, series: e.series, repMin: e.repMin, repMax: e.repMax, rir: 1, desc: e.desc, subs: [] }); });
+  }));
+  return [...m.values()].sort((a, b) => a.grupo.localeCompare(b.grupo) || a.nome.localeCompare(b.nome));
+}
+const semAcento = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function folhaBiblioteca() {
+  folha("Adicionar exercício", `
+    <input id="lib-q" class="lib-busca" placeholder="Buscar exercício" autocomplete="off">
+    <div id="lib-lista" class="lib-lista"></div>
+    <button class="btn ghost" style="width:100%;margin-top:10px" data-novoex>Criar exercício que não está na lista</button>`);
+  pintaLib("");
+  setTimeout(() => { const i = document.getElementById("lib-q"); if (i) i.focus(); }, 220);
+}
+function pintaLib(q) {
+  const box = document.getElementById("lib-lista"); if (!box) return;
+  const termo = semAcento(q || "");
+  const itens = biblioteca().filter(x => !termo || semAcento(x.nome).includes(termo) || semAcento(x.grupo).includes(termo)).slice(0, 40);
+  box.innerHTML = itens.length ? itens.map(x => `<button class="sub-b" data-libpick="${esc(x.nome)}">
+    <b style="font-weight:600">${esc(x.nome)}</b><br><span style="font-family:var(--f-mono);font-size:10.5px;color:var(--ink-3)">${esc(x.grupo)} · ${x.series}x${x.repMin}-${x.repMax}</span></button>`).join("")
+    : `<p class="empty">Nada encontrado. Crie o exercício pelo botão abaixo.</p>`;
+}
+function folhaNovoEx() {
+  folha("Novo exercício", `<div class="form">
+    <label>Nome</label><input id="nx-nome" placeholder="Ex.: Panturrilha no leg press">
+    <label>Grupo muscular</label>
+    <select id="nx-grupo">${["Peito","Costas","Ombro","Braço","Perna","Abdômen"].map(g => `<option>${g}</option>`).join("")}</select>
+    <label>Tipo</label>
+    <select id="nx-tipo"><option value="isolador">Isolador</option><option value="composto">Composto</option></select>
+    <div class="form-row">
+      <div><label>Séries</label><input id="nx-ser" type="number" value="3"></div>
+      <div><label>Descanso (s)</label><input id="nx-desc" type="number" value="75"></div>
+    </div>
+    <div class="form-row">
+      <div><label>Reps mín.</label><input id="nx-rmin" type="number" value="10"></div>
+      <div><label>Reps máx.</label><input id="nx-rmax" type="number" value="12"></div>
+    </div>
+    <button class="btn" style="width:100%;margin-top:16px" data-salvarex>Adicionar ao treino avulso</button>
+  </div>`);
+}
+function addCust(base) {
+  CUST.push(Object.assign({ id: "cx" + Date.now().toString(36), wid: "Z", tec: null, notas: [] }, base));
+  grava(K.cust, CUST);
+}
 
 function aviso(msg) {
   let t = document.querySelector(".toast");
@@ -121,7 +204,7 @@ function vPainel() {
   const pct = Math.round(((CICLO.semana - 1) * 7 + CICLO.diaIdx) / 84 * 100);
   const seq = sequencia();
   const evo = evoluiram();
-  const pend = t ? t.ex.filter(e => !(SES && SES.treino === t.id && SES.feitos[e.id])).length : 0;
+  const pend = t ? exsDe(t).filter(e => !(SES && SES.treino === t.id && SES.feitos[e.id])).length : 0;
 
   app.innerHTML = topo() + nav("p") + `
   <section class="hero rise">
@@ -142,7 +225,7 @@ function vPainel() {
   <div class="card destaque plain">
     <div class="grp">Dia ${t.id} · ${esc(t.grupo)}</div>
     <h3>${esc(t.titulo)}</h3>
-    <p class="focus">${t.ex.length} exercícios · ${pend} ${pend === 1 ? "pendente" : "pendentes"} · ${PERFIL.duracao} min</p>
+    <p class="focus">${exsDe(t).length} exercícios · ${pend} ${pend === 1 ? "pendente" : "pendentes"} · ${PERFIL.duracao} min</p>
     <div class="tags">
       <span class="tag azul">Compostos RIR ${s.rirCTxt}</span>
       <span class="tag">Isoladores RIR ${s.rirITxt}</span>
@@ -165,6 +248,13 @@ function vPainel() {
     ${TREINOS.map(x => `<button class="mini ${x.id === d ? "on" : ""}" data-dia="${x.id}">${x.id} · ${esc(x.grupo)}</button>`).join("")}
     <button class="mini ${d === "R" ? "on" : ""}" data-dia="R">Descanso</button>
   </div>
+
+  <div class="sec">Fora do programa</div>
+  <button class="card" data-avulso>
+    <div class="grp">Avulso</div>
+    <h3>Treino avulso</h3>
+    <p class="focus">Monte a sessão na hora e registre igual aos treinos do ciclo. Não avança o dia do programa.</p>
+  </button>
 
   ${evo.length ? `<div class="sec">Cargas que evoluíram</div>
   ${evo.slice(0, 6).map(x => `<button class="card" data-ir="hx/${x.id}">
@@ -215,7 +305,7 @@ function estagnados() {
 /* ============================================================ TREINO */
 function abreSessao(tid) {
   if (!SES || SES.treino !== tid) {
-    SES = { treino: tid, semana: CICLO.semana, inicio: Date.now(), d: hoje(), idx: 0, feitos: {}, aq: false };
+    SES = { treino: tid, semana: CICLO.semana, inicio: Date.now(), d: hoje(), loc: LOCS[0] || "", idx: 0, feitos: {}, aq: false };
     grava(K.ses, SES);
     return;
   }
@@ -223,7 +313,7 @@ function abreSessao(tid) {
   if (!Object.keys(SES.feitos).length) {
     let mudou = false;
     if (SES.semana !== CICLO.semana) { SES.semana = CICLO.semana; mudou = true; }
-    if (SES.d !== hoje()) { SES.d = hoje(); mudou = true; }
+    if (!SES.dManual && SES.d !== hoje()) { SES.d = hoje(); mudou = true; }
     if (mudou) grava(K.ses, SES);
   }
 }
@@ -235,11 +325,12 @@ function vTreino() {
   if (!t) return vPainel();
   abreSessao(tid);
 
-  const total = t.ex.length;
+  const lista = exsDe(t);
+  const total = lista.length;
   const feitos = Object.keys(SES.feitos).length;
   const i = Math.min(SES.idx, total - 1);
-  const ex = t.ex[i];
-  const par = ex.ss && ex.ssOrdem === 1 ? t.ex[i + 1] : null;
+  const ex = lista[i];
+  const par = ex && ex.ss && ex.ssOrdem === 1 ? lista[i + 1] : null;
 
   app.innerHTML = topo("Treino " + t.id + " · " + (i + 1) + "/" + total) + `
   <section class="hero rise" style="padding-bottom:12px">
@@ -247,6 +338,20 @@ function vTreino() {
     <p style="margin-bottom:10px">${feitos} de ${total} exercícios concluídos${t.nota ? " · " + esc(t.nota) : ""}</p>
     <div class="pbar"><i style="width:${Math.round(feitos / total * 100)}%"></i></div>
   </section>
+
+  <div class="card plain rise">
+    <div class="grp">Sessão</div>
+    <div class="sessao" style="padding:12px 0 0">
+      <div class="quando">
+        <button class="mini ${SES.d === hoje() ? "on" : ""}" data-quando="hoje">Treinei hoje</button>
+        <button class="mini ${SES.d === ontem() ? "on" : ""}" data-quando="ontem">Treinei ontem</button>
+        <button class="mini" data-quando="outra">Outra data</button>
+      </div>
+      <input type="date" id="ses-data" value="${SES.d}" max="${hoje()}">
+      <input type="text" id="ses-loc" list="locs" placeholder="Local do treino" value="${esc(SES.loc || "")}" autocomplete="off">
+      <datalist id="locs">${LOCS.map(l => `<option value="${esc(l)}"></option>`).join("")}</datalist>
+    </div>
+  </div>
 
   ${!SES.aq ? `
   <div class="card plain rise">
@@ -256,7 +361,8 @@ function vTreino() {
     <div class="btns" style="padding:13px 0 0"><button class="btn ghost" data-aqgeral>Concluir aquecimento geral</button></div>
   </div>` : ""}
 
-  ${cardEx(t, ex, i, par)}
+  ${ex ? cardEx(t, ex, i, par) : `<p class="empty">Nenhum exercício ainda. Adicione abaixo.</p>`}
+  ${t.avulso ? `<button class="btn ghost" style="width:100%;margin-bottom:14px" data-addex>+ Adicionar exercício</button>` : ""}
 
   <div class="btns duo" style="padding:0">
     <button class="btn ghost" data-nav="-1" ${i === 0 ? "disabled" : ""}>← Anterior</button>
@@ -281,6 +387,7 @@ function cardEx(t, ex, i, par) {
   const nome = exNome(ex);
   const est = Engine.estagnado(ex.id, LOGS);
 
+  const listaEx = exsDe(t);
   const registro = (e, pos) => {
     const f = SES.feitos[e.id] || {};
     return `
@@ -311,12 +418,18 @@ function cardEx(t, ex, i, par) {
     </div>`;
   };
 
-  const blocos = (e, sg, ul) => `
+  const blocos = (e, sg, ul) => {
+    const rc = recCarga(e.id), rr = rc ? repsNaCarga(e.id, rc) : 0;
+    return `
     <div class="linha-num">
-      <div class="bloco"><div class="k">Última</div><div class="v">${ul ? fmtN(ul.carga) : "—"}<small>${ul ? " " + U() : ""}</small></div></div>
-      <div class="bloco"><div class="k">Reps · RIR</div><div class="v" style="font-size:18px">${ul ? ul.reps + " · " + fmtRir(ul.rir) : "—"}</div></div>
-      <div class="bloco alvo"><div class="k">Sugerida hoje</div><div class="v">${sg.carga != null ? fmtN(sg.carga) : "—"}<small>${sg.carga != null ? " " + U() : ""}</small></div></div>
+      <div class="bloco"><div class="k">Última</div><div class="v">${ul ? fmtN(ul.carga) : "—"}<small>${ul ? " " + U() : ""}</small></div>
+        <div class="k" style="margin-top:4px;letter-spacing:.04em">${ul ? ul.reps + " reps · RIR " + fmtRir(ul.rir) : "sem registro"}</div></div>
+      <div class="bloco recorde"><div class="k">Recorde</div><div class="v">${rc ? fmtN(rc) : "—"}<small>${rc ? " " + U() : ""}</small></div>
+        <div class="k" style="margin-top:4px;letter-spacing:.04em">${rc ? rr + " reps nessa carga" : "a bater"}</div></div>
+      <div class="bloco alvo"><div class="k">Sugerida hoje</div><div class="v">${sg.carga != null ? fmtN(sg.carga) : "—"}<small>${sg.carga != null ? " " + U() : ""}</small></div>
+        <div class="k" style="margin-top:4px;letter-spacing:.04em">RIR ${Engine.rirAlvoTxt(e, sem)}</div></div>
     </div>`;
+  };
 
   const aquec = (e, a) => !a.linhas.length ? "" : `
     <div class="aq" id="aq-${e.id}">
@@ -344,10 +457,10 @@ function cardEx(t, ex, i, par) {
     return `
     <article class="ex-card rise">
       <div class="ss-flag">Supersérie · ${esc(SUPERSERIES[ex.ss] || "")} · sem descanso entre os dois</div>
-      ${head(ex, "Exercício " + (i + 1) + " de " + t.ex.length)}
+      ${head(ex, "Exercício " + (i + 1) + " de " + listaEx.length)}
       ${chips(ex)} ${blocos(ex, sug, u)} ${aquec(ex, aq)} ${infos(ex, sug, bo)}
       ${registro(ex, "Registro do primeiro exercício")}
-      ${head(par, "Exercício " + (i + 2) + " de " + t.ex.length)}
+      ${head(par, "Exercício " + (i + 2) + " de " + listaEx.length)}
       ${chips(par)} ${blocos(par, sugB, uB)} ${aquec(par, aqB)} ${infos(par, sugB, Engine.backoff(sugB.carga, par, CFG))}
       ${registro(par, "Registro do segundo exercício")}
       <div class="aviso azul"><b>Descanso</b>Só depois de completar os dois exercícios: ${Engine.descanso(par)} segundos.</div>
@@ -361,12 +474,13 @@ function cardEx(t, ex, i, par) {
 
   return `
   <article class="ex-card rise">
-    ${head(ex, "Exercício " + (i + 1) + " de " + t.ex.length + (feito ? " · concluído" : ""))}
+    ${head(ex, "Exercício " + (i + 1) + " de " + listaEx.length + (feito ? " · concluído" : ""))}
     ${chips(ex)}
     ${blocos(ex, sug, u)}
     <div class="aviso ${sug.tipo === "subir" ? "verde" : sug.tipo === "descarga" ? "" : "azul"}">
       <b>Carga de hoje</b>${esc(sug.txt)}
     </div>
+    ${feito && feito.pr ? `<div class="aviso verde"><b>Novo recorde</b>${esc(feito.pr.txt)}</div>` : ""}
     ${est ? `<div class="aviso"><b>Estagnação</b>${est.n} sessões sem ganho. Considere trocar por uma substituição ou reduzir o volume nesta semana.</div>` : ""}
     ${tec ? `<div class="aviso"><b>Técnica da semana · ${esc(tec.n)}</b>${esc(tec.d)}</div>` : ""}
     ${aquec(ex, aq)}
@@ -378,6 +492,7 @@ function cardEx(t, ex, i, par) {
         <button class="btn ghost" data-descanso-manual="${Engine.descanso(ex)}|${esc(nome)}">Iniciar descanso</button>
         <button class="btn ghost" data-subs="${ex.id}">Substituir</button>
       </div>
+      ${ex.wid ? `<button class="mini danger" data-delex="${ex.id}">Remover do treino avulso</button>` : ""}
     </div>
     ${listaSubs(ex)}
   </article>`;
@@ -413,7 +528,7 @@ function listaSubs(e) {
 /* concluir exercício */
 function concluir(ids) {
   const lista = ids.split("|");
-  let ok = 0;
+  let ok = 0; const prs = [];
   lista.forEach(id => {
     const c = document.getElementById("c-" + id), r = document.getElementById("r-" + id);
     const dor = document.getElementById("dor-" + id);
@@ -421,7 +536,9 @@ function concluir(ids) {
     const carga = c && c.value !== "" ? parseFloat(c.value) : null;
     const reps = r && r.value !== "" ? parseInt(r.value, 10) : null;
     if (carga == null || reps == null || f.rir == null) return;
-    SES.feitos[id] = { carga, reps, rir: f.rir, dor: !!(dor && dor.checked) };
+    const pr = checaPR(id, carga, reps);
+    SES.feitos[id] = { carga, reps, rir: f.rir, dor: !!(dor && dor.checked), pr };
+    if (pr) prs.push(pr);
     ok++;
   });
   if (ok < lista.length) return aviso("Preencha carga, repetições e RIR antes de concluir");
@@ -429,13 +546,14 @@ function concluir(ids) {
 
   const t = treino(SES.treino);
   const ultimo = lista[lista.length - 1];
-  const ex = t.ex.find(e => e.id === ultimo);
-  const prox = t.ex.findIndex(e => !SES.feitos[e.id]);
-  SES.idx = prox === -1 ? t.ex.length - 1 : prox;
+  const ex = exsDe(t).find(e => e.id === ultimo);
+  const lx = exsDe(t);
+  const prox = lx.findIndex(e => !SES.feitos[e.id]);
+  SES.idx = prox === -1 ? lx.length - 1 : prox;
   grava(K.ses, SES);
   Timer.iniciar(Engine.descanso(ex) || CFG.descPadrao, "Descanso · " + exNome(ex));
   render();
-  aviso(ok > 1 ? "Supersérie registrada" : "Exercício registrado");
+  aviso(prs.length ? "Novo recorde. " + prs[0].txt : (ok > 1 ? "Supersérie registrada" : "Exercício registrado"));
 }
 
 /* finalizar treino */
@@ -447,22 +565,27 @@ function finalizar() {
     if (!confirmar("fim")) return aviso("Toque de novo para descartar a sessão");
     SES = null; grava(K.ses, null); return irPara("");
   }
+  const dataSes = (document.getElementById("ses-data") || {}).value || SES.d || hoje();
+  const locSes = ((document.getElementById("ses-loc") || {}).value || SES.loc || "").trim();
+  SES.d = dataSes; SES.loc = locSes;
+  if (locSes) { LOCS = [locSes].concat(LOCS.filter(l => l !== locSes)).slice(0, 12); grava(K.locs, LOCS); }
   ids.forEach(id => {
-    const e = t.ex.find(x => x.id === id); if (!e) return;
+    const e = exsDe(t).find(x => x.id === id); if (!e) return;
     const f = SES.feitos[id];
     const sug = Engine.sugestao(e, SES.semana, LOGS, CFG);
     LOGS[id] = LOGS[id] || [];
-    const reg = { d: SES.d || hoje(), semana: SES.semana, treino: t.id, nome: exNome(e),
-                  carga: f.carga, reps: f.reps, rir: f.rir, dor: !!f.dor,
+    const reg = { d: dataSes, semana: SES.semana, treino: t.id, nome: exNome(e),
+                  carga: f.carga, reps: f.reps, rir: f.rir, dor: !!f.dor, loc: locSes,
+                  pr: f.pr ? f.pr.k : null,
                   rirAlvo: Engine.rirAlvo(e, SES.semana), sugerida: sug.carga };
     if (LOGS[id][0] && LOGS[id][0].d === reg.d) LOGS[id][0] = reg; else LOGS[id].unshift(reg);
     LOGS[id] = LOGS[id].slice(0, 500);
   });
   CICLO.sessoes++;
-  CICLO.dias = (CICLO.dias || []).filter(x => !(x.d === (SES.d || hoje()) && x.t === t.id));
-  CICLO.dias.push({ d: SES.d || hoje(), t: t.id, s: SES.semana });
+  CICLO.dias = (CICLO.dias || []).filter(x => !(x.d === dataSes && x.t === t.id));
+  CICLO.dias.push({ d: dataSes, t: t.id, s: SES.semana });
   CICLO.dias = CICLO.dias.slice(-200);
-  avancaDia();
+  if (!t.avulso) avancaDia();
   SES = null; grava(K.ses, null);
   grava(K.logs, LOGS); grava(K.ciclo, CICLO);
   Timer.parar();
@@ -539,7 +662,8 @@ function vHistEx(id) {
     ${h.map((x, k) => `<div class="hl">
       <span class="d">${dtL(x.d)}</span>
       <span class="kg">${fmtN(x.carga)} ${U()}</span>
-      <span class="rr">${x.reps} reps · RIR ${fmtRir(x.rir)} · S${x.semana}${x.dor ? " · dor" : ""}</span>
+      <span class="rr">${x.reps} reps · RIR ${fmtRir(x.rir)} · S${x.semana}${x.dor ? " · dor" : ""}${x.loc ? " · " + esc(x.loc) : ""}</span>
+      ${x.carga === rec.carga.carga && x.reps === repsNaCarga(id, x.carga) ? `<span class="pr">recorde</span>` : ""}
       <span class="tools"><button class="mini danger" data-apagar="${id}|${k}">Apagar</button></span>
     </div>`).join("")}
   </div>
@@ -643,6 +767,43 @@ document.addEventListener("click", ev => {
   if (el.hasAttribute("data-tm")) return el.getAttribute("data-tm") === "stop" ? Timer.parar() : Timer.mais(15);
   if (el.hasAttribute("data-ir")) return irPara(el.getAttribute("data-ir"));
 
+  if (el.hasAttribute("data-fecha")) return fechaFolha();
+  if (el.hasAttribute("data-addex")) return folhaBiblioteca();
+  if (el.hasAttribute("data-novoex")) { fechaFolha(); return setTimeout(folhaNovoEx, 210); }
+  if (el.hasAttribute("data-libpick")) {
+    const nome = el.getAttribute("data-libpick");
+    const b = biblioteca().find(x => x.nome === nome);
+    addCust({ nome: b.nome, grupo: b.grupo, tipo: b.tipo, membro: b.membro, series: b.series, repMin: b.repMin, repMax: b.repMax, rir: 1, desc: b.desc, subs: b.subs });
+    fechaFolha(); render(); return aviso("Exercício adicionado");
+  }
+  if (el.hasAttribute("data-salvarex")) {
+    const nome = document.getElementById("nx-nome").value.trim();
+    if (!nome) return aviso("Dê um nome ao exercício");
+    const g = document.getElementById("nx-grupo").value;
+    addCust({ nome, grupo: g, tipo: document.getElementById("nx-tipo").value,
+      membro: g === "Perna" ? "inf" : "sup",
+      series: parseInt(document.getElementById("nx-ser").value, 10) || 3,
+      repMin: parseInt(document.getElementById("nx-rmin").value, 10) || 10,
+      repMax: parseInt(document.getElementById("nx-rmax").value, 10) || 12,
+      rir: 1, desc: [parseInt(document.getElementById("nx-desc").value, 10) || 75, parseInt(document.getElementById("nx-desc").value, 10) || 75], subs: [] });
+    fechaFolha(); render(); return aviso("Exercício adicionado");
+  }
+  if (el.hasAttribute("data-delex")) {
+    const id = el.getAttribute("data-delex");
+    if (!confirmar("dx" + id)) { el.textContent = "Confirmar?"; return; }
+    CUST = CUST.filter(c => c.id !== id); grava(K.cust, CUST); render(); return aviso("Exercício removido");
+  }
+  if (el.hasAttribute("data-quando")) {
+    const q = el.getAttribute("data-quando");
+    const inp = document.getElementById("ses-data");
+    if (q === "outra") { inp.showPicker ? inp.showPicker() : inp.focus(); return; }
+    SES.d = q === "hoje" ? hoje() : ontem(); SES.dManual = q !== "hoje"; grava(K.ses, SES); render();
+    return aviso(q === "hoje" ? "Sessão marcada para hoje" : "Sessão marcada para ontem");
+  }
+  if (el.hasAttribute("data-avulso")) {
+    SES = { treino: "Z", semana: CICLO.semana, inicio: Date.now(), d: hoje(), loc: LOCS[0] || "", idx: 0, feitos: {}, aq: true };
+    grava(K.ses, SES); return irPara("t");
+  }
   if (el.hasAttribute("data-dia")) {
     const d = el.getAttribute("data-dia");
     CICLO.diaIdx = DIAS.indexOf(d); grava(K.ciclo, CICLO);
@@ -653,7 +814,7 @@ document.addEventListener("click", ev => {
   if (el.hasAttribute("data-aqgeral")) { SES.aq = true; grava(K.ses, SES); render(); return Timer.iniciar(180, "Aquecimento geral"); }
   if (el.hasAttribute("data-nav")) {
     const t = treino(SES.treino);
-    SES.idx = Math.max(0, Math.min(t.ex.length - 1, SES.idx + parseInt(el.getAttribute("data-nav"), 10)));
+    SES.idx = Math.max(0, Math.min(exsDe(t).length - 1, SES.idx + parseInt(el.getAttribute("data-nav"), 10)));
     grava(K.ses, SES); return render();
   }
   if (el.hasAttribute("data-rir")) {
@@ -715,6 +876,9 @@ document.addEventListener("click", ev => {
 
 document.addEventListener("input", ev => {
   const id = ev.target.id || "";
+  if (id === "lib-q") return pintaLib(ev.target.value);
+  if (id === "ses-data" && SES) { SES.d = ev.target.value || hoje(); SES.dManual = SES.d !== hoje(); grava(K.ses, SES); return; }
+  if (id === "ses-loc" && SES) { SES.loc = ev.target.value; grava(K.ses, SES); return; }
   if (id.startsWith("c-")) {
     const v = parseFloat(ev.target.value);
     if (!isNaN(v) && v > 0) recalcAq(id.slice(2), v);
