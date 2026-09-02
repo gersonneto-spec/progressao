@@ -57,6 +57,18 @@ As cargas são calculadas sobre a carga sugerida do dia e recalculadas ao vivo q
 - **Histórico**: por exercício, com gráfico de carga, recordes de carga e de repetições, variação percentual, estagnação e todas as sessões.
 - **Ajustes**: unidade, incrementos, descanso padrão, Graviton, semana e dia do ciclo, backup JSON, exportação CSV, importação e zerar ciclo.
 
+## Sessão: data e local
+
+No topo do treino há os botões "Treinei hoje" e "Treinei ontem", mais um seletor de data para qualquer dia anterior, e o campo de local do treino com sugestão dos locais já usados. Data e local ficam gravados em cada registro e aparecem no histórico.
+
+## Recordes
+
+Cada exercício mostra o bloco de recorde com a maior carga já registrada e quantas repetições você fez nela. Ao concluir uma série que supera a maior carga, ou que supera as repetições naquela mesma carga, o app avisa na hora e marca o registro no histórico.
+
+## Treino avulso
+
+Sessão fora do programa, montada na hora. Adicione exercícios da biblioteca (todos os do programa e suas substituições, com busca) ou crie um que não existe na lista. Registra igual aos treinos do ciclo, com progressão e recordes, e não avança o dia do programa.
+
 ## Persistência
 
 Tudo em `localStorage`, salvo a cada ação. A sessão em andamento é retomada ao reabrir o app. Backup em JSON e histórico em CSV pelos botões de Ajustes.
@@ -65,7 +77,7 @@ Tudo em `localStorage`, salvo a cada ação. A sessão em andamento é retomada 
 
 ```
 index.html               shell
-css/style.css            tema escuro azul-marinho
+css/style.css            tema claro de alto contraste
 js/data.js               perfil, periodização e os 6 treinos
 js/engine.js             progressão, aquecimento e regras semanais
 js/app.js                telas, cronômetro, persistência e backup
